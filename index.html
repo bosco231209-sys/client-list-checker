@@ -489,7 +489,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if (issues.length) {
         for (let c = 1; c <= ncol; c++) row.getCell(c).fill = RED;
         sc.value = 'INVALID'; sc.fill = RED;
-        nt.value = issues.concat(fixes).join('; '); nt.fill = RED;
+        nt.value = issues.concat(fixes).join('; ').slice(0, 32000); nt.fill = RED;
         stats.invalid++;
         issues.forEach(i => { const f = i.split(':')[0]; byField[f] = (byField[f] || 0) + 1; log.push([rn, s(get(C.id)), who, 'INVALID', i]); });
       } else {
@@ -557,18 +557,27 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const first = text.split(/\r?\n/)[0] || '';
     const count = ch => first.split(ch).length - 1;
     const delim = [',', ';', '\t'].sort((x, y) => count(y) - count(x))[0];
-    const rows = []; let row = [], field = '', q = false;
+    const rows = []; let row = [], field = '', q = false, started = false;
+    const MAX = 32767;
+    const endField = () => { row.push(field.length > MAX ? field.slice(0, MAX) : field); field = ''; started = false; };
     for (let i = 0; i < text.length; i++) {
       const c = text[i];
       if (q) {
-        if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else q = false; }
-        else field += c;
-      } else if (c === '"') q = true;
-      else if (c === delim) { row.push(field); field = ''; }
-      else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(field); rows.push(row); row = []; field = ''; }
-      else field += c;
+        if (c === '"') {
+          const n = text[i + 1];
+          if (n === '"') { field += '"'; i++; }
+          else if (n === undefined || n === delim || n === '\n' || n === '\r') q = false;
+          else field += '"';            // stray quote inside a quoted value: keep it as text
+        } else if ((c === '\n' || c === '\r') && field.length > 2000) {
+          // a quoted value running past 2,000 characters across lines is a broken quote: close it here
+          q = false; i--;
+        } else field += c;
+      } else if (c === '"' && !started) { q = true; started = true; }
+      else if (c === delim) endField();
+      else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; endField(); rows.push(row); row = []; }
+      else { field += c; started = true; }
     }
-    if (field !== '' || row.length) { row.push(field); rows.push(row); }
+    if (field !== '' || row.length) { endField(); rows.push(row); }
     return rows.filter(r => r.some(v => v.trim() !== ''));
   }
   function toCSV(ws) {
