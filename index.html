@@ -480,7 +480,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         stats.invalid++;
         issues.forEach(i => { const f = i.split(':')[0]; byField[f] = (byField[f] || 0) + 1; log.push([rn, s(get(C.id)), who, 'INVALID', i]); });
       } else {
-        fixed.forEach(c => { if (!(c === C.city && fixes.every(f => !f.startsWith('City') || f.startsWith('City formatted')))) row.getCell(c).fill = YEL; });
+        fixed.forEach(c => { row.getCell(c).fill = YEL; });
         if (checks.length) {
           row.getCell(C.city).fill = ORANGE; sc.value = 'CHECK'; sc.fill = ORANGE;
           nt.value = checks.concat(fixes).join('; '); nt.fill = NONE; stats.check++;
@@ -511,7 +511,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     lg.addRow([]);
     lg.addRow(['Excel row', 'CustomerID', 'Client', 'Type', 'Detail']).font = { bold: true };
     const order = { INVALID: 0, CHECK: 1, CORRECTED: 2 };
-    log.sort((a, b) => order[a[3]] - order[b[3]] || (a[4].includes('formatted') - b[4].includes('formatted')) || a[0] - b[0])
+    log.sort((a, b) => order[a[3]] - order[b[3]] || a[0] - b[0])
       .forEach(e => lg.addRow(e));
     [34, 12, 26, 12, 90].forEach((w, i) => { lg.getColumn(i + 1).width = w; });
 
@@ -647,8 +647,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
   function renderTable() {
     const tb = $('tbody'); tb.innerHTML = '';
-    const rows = result.log.filter(l => view === 'bad' ? l[3] !== 'CORRECTED' : (l[3] === 'CORRECTED' && !/^City formatted/.test(l[4])));
-    const shown = rows.slice(0, 500);
+    const rows = result.log.filter(l => view === 'bad' ? l[3] !== 'CORRECTED' : l[3] === 'CORRECTED');
+    const shown = rows.slice(0, 3000);
     shown.forEach(l => {
       const tr = document.createElement('tr');
       const a = document.createElement('td'); a.className = 'n'; a.textContent = l[0];
@@ -659,8 +659,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       tr.append(a, b, c); tb.appendChild(tr);
     });
     if (!shown.length) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 3; td.textContent = view === 'bad' ? 'No invalid rows.' : 'No corrections were needed.'; tr.appendChild(td); tb.appendChild(tr); }
-    $('tnote').textContent = rows.length > 500 ? 'Showing the first 500 of ' + rows.length.toLocaleString() + '. The full list is in the Cleanup Log tab of the downloaded file.' :
-      (view === 'fix' ? 'Capitalisation-only city changes are not listed here; they are in the Cleanup Log tab.' : '');
+    $('tnote').textContent = rows.length > 3000 ? 'Showing the first 3,000 of ' + rows.length.toLocaleString() + '. The full list is in the Cleanup Log tab of the downloaded file.' :
+      (view === 'fix' ? rows.length.toLocaleString() + ' corrections. Each corrected cell is yellow in the downloaded file.' : '');
   }
   $('tabBad').addEventListener('click', () => { view = 'bad'; $('tabBad').setAttribute('aria-pressed', 'true'); $('tabFix').setAttribute('aria-pressed', 'false'); renderTable(); });
   $('tabFix').addEventListener('click', () => { view = 'fix'; $('tabFix').setAttribute('aria-pressed', 'true'); $('tabBad').setAttribute('aria-pressed', 'false'); renderTable(); });
