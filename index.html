@@ -609,6 +609,42 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       return '<font>' + parts.sort((x, y) => rank(x) - rank(y)).join('') + '</font>';
     });
     zip.file('xl/styles.xml', xml);
+
+    // workbook.xml: make sure it has a window record and filter names, like files saved by Excel
+    const wbf = zip.file('xl/workbook.xml');
+    if (wbf) {
+      let wx = await wbf.async('string');
+      if (!/<bookViews>/.test(wx)) wx = wx.replace(/<sheets>/, '<bookViews><workbookView xWindow="0" yWindow="500" windowWidth="28800" windowHeight="17500" activeTab="0"/></bookViews><sheets>');
+      wx = wx.replace(/(<workbookView\b[^>]*?)\sactiveTab="\d+"/, '$1 activeTab="0"');
+      const rels = await zip.file('xl/_rels/workbook.xml.rels').async('string');
+      const sheets = [...wx.matchAll(/<sheet\b[^>]*name="([^"]*)"[^>]*r:id="([^"]+)"/g)];
+      const names = [];
+      for (let idx = 0; idx < sheets.length; idx++) {
+        const [, name, rid] = sheets[idx];
+        if (new RegExp('name="_xlnm\\._FilterDatabase"[^>]*localSheetId="' + idx + '"').test(wx)) continue;
+        const target = (rels.match(new RegExp('Id="' + rid + '"[^>]*Target="([^"]+)"')) || rels.match(new RegExp('Target="([^"]+)"[^>]*Id="' + rid + '"')) || [])[1];
+        if (!target) continue;
+        const sf = zip.file('xl/' + target.replace(/^\/?xl\//, ''));
+        if (!sf) continue;
+        let sx = await sf.async('string');
+        const fixedSx = sx.replace(/x14ac:dyDescent="55"/g, 'x14ac:dyDescent="0.25"');
+        if (fixedSx !== sx) { sx = fixedSx; zip.file('xl/' + target.replace(/^\/?xl\//, ''), sx); }
+        const af = sx.match(/<autoFilter ref="([A-Z]+)(\d+):([A-Z]+)(\d+)"/);
+        if (!af) continue;
+        const dim = sx.match(/<dimension ref="[A-Z]+\d+:[A-Z]+(\d+)"/);
+        const lastRow = dim ? dim[1] : af[4];
+        const q = "'" + name.replace(/&apos;/g, "''") + "'";
+        names.push('<definedName name="_xlnm._FilterDatabase" localSheetId="' + idx + '" hidden="1">' + q + '!$' + af[1] + '$' + af[2] + ':$' + af[3] + '$' + lastRow + '</definedName>');
+      }
+      // drop ExcelJS's own copy (no localSheetId) so names are not duplicated
+      wx = wx.replace(/<definedName name="_xlnm\._FilterDatabase"(?![^>]*localSheetId)[^>]*>[^<]*<\/definedName>/g, '');
+      if (names.length) {
+        if (/<definedNames>/.test(wx)) wx = wx.replace('<definedNames>', '<definedNames>' + names.join(''));
+        else wx = wx.replace('</sheets>', '</sheets><definedNames>' + names.join('') + '</definedNames>');
+      }
+      wx = wx.replace(/<definedNames><\/definedNames>/, '');
+      zip.file('xl/workbook.xml', wx);
+    }
     return zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
   }
 
